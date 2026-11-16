@@ -7,7 +7,7 @@
     "start": "electron .",
     "build": "electron-builder"
   },
-  "author": "TEXAS INTECH Innovation & Technology ลุงแจ่ม อารมณ์ดี",
+  "author": "TEXAS INTECH Innovation & Technology แจ่ม อารมณ์ดี",
   "devDependencies": {
     "electron": "^28.0.0",
     "electron-builder": "^24.9.0"
@@ -15,7 +15,6 @@
   "build": {
     "appId": "com.aromdee2012.mp3cutter",
     "productName": "Studio Audio Cutter",
-    "publish": "never",
     "directories": {
       "output": "dist"
     },
