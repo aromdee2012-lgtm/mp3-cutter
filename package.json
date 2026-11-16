@@ -1,0 +1,41 @@
+{
+  "name": "texas-intech-toolbox",
+  "version": "1.0.0",
+  "description": "All-in-One Dashboard Launcher",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "ลุงแจ่ม อารมณ์ดี",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0"
+  },
+  "build": {
+    "appId": "com.example.texasintechtoolbox",
+    "productName": "Texas Intech Toolbox",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "shortcutName": "Texas Intech Toolbox"
+    }
+  }
+}
+```[cite: 2]
+
+### สิ่งที่เพิ่มเข้ามา:
+1. **`electron-builder`** ใน `devDependencies` สำหรับใช้แพ็กเกจแอปพลิเคชันให้เป็นไฟล์ `.exe` (Installer)[cite: 2]
+2. **คำสั่ง `"build": "electron-builder"`** ใน `scripts` เพื่อให้คุณรันคำสั่ง `npm run build` เพื่อสร้างไฟล์ติดตั้งได้ทันที[cite: 2]
+3. **ตั้งค่า `"build"`** ด้านล่างสุด โดยอ้างอิงไฟล์ **`icon.ico`** สำหรับไอคอนโปรแกรม ไอคอนหน้าจอเดสก์ท็อป และไอคอนตอนติดตั้ง[cite: 2]
+
+> **ข้อแนะนำเพิ่มเติม:** ให้นำไฟล์รูปไอคอนของคุณที่ชื่อ `icon.ico` ไปวางไว้ที่โฟลเดอร์โปรเจกต์เดียวกันกับไฟล์ `package.json` นี้ได้เลยครับ[cite: 2]
