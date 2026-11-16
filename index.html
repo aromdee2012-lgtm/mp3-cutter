@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="th" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แอปตัดต่อไฟล์เสียง MP3 - Studio Audio Cutter</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Prompt & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- LameJS for Client-side MP3 Encoding -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        studio: {
+                            950: '#09090b',
+                            900: '#121216',
+                            800: '#1c1c22',
+                            700: '#27272f',
+                            accent: '#6366f1',
+                            accentHover: '#4f46e5',
+                            cyan: '#06b6d4',
+                            emerald: '#10b981'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for Waveform Zoom */
+        ::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #121216;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272f;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+        /* Custom Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #6366f1;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #27272f;
+            border-radius: 2px;
+        }
+        .waveform-cursor {
+            cursor: ew-resize;
+        }
+    </style>
+</head>
+<body class="bg-studio-950 text-zinc-100 font-sans min-h-screen flex flex-col selection:bg-studio-accent selection:text-white">
+
+    <!-- Header -->
+    <header class="border-b border-studio-800 bg-studio-900/80 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <i class="fa-solid fa-scissors text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
+                        แอปตัดต่อไฟล์เสียง MP3
+                    </h1>
+                    <p class="text-xs text-zinc-400 hidden sm:block">ตัดต่อ ปรับเสียง Fade In/Out และแปลงไฟล์บนเบราว์เซอร์ 100%</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <span class="hidden md:inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <i class="fa-solid fa-shield-halved mr-1.5"></i> ปลอดภัย ไม่อัปโหลดไฟล์ขึ้นเซิร์ฟเวอร์
+                </span>
+                <button id="resetBtn" class="hidden px-3 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-zinc-300 text-sm transition flex items-center gap-2 border border-studio-700">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <span class="hidden sm:inline">เลือกไฟล์ใหม่</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex flex-col justify-center">
+
+        <!-- Toast / Notification Banner -->
+        <div id="toastBox" class="fixed bottom-5 right-5 z-50 transform transition-all duration-300 translate-y-20 opacity-0 pointer-events-none">
+            <div class="bg-studio-800 border border-studio-700 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3">
+                <i id="toastIcon" class="fa-solid fa-circle-info text-indigo-400 text-lg"></i>
+                <span id="toastMsg" class="text-sm font-medium">ข้อความแจ้งเตือน</span>
+            </div>
+        </div>
+
+        <!-- 1. Upload Zone (Initial View) -->
+        <section id="uploadSection" class="w-full max-w-3xl mx-auto my-auto">
+            <div id="dropZone" class="border-2 border-dashed border-studio-700 hover:border-indigo-500 bg-studio-900/50 hover:bg-studio-900 rounded-3xl p-8 sm:p-14 text-center transition-all duration-300 cursor-pointer group relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-b from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                
+                <div class="relative z-10 flex flex-col items-center">
+                    <div class="w-20 h-20 rounded-2xl bg-studio-800 group-hover:bg-indigo-500/20 border border-studio-700 group-hover:border-indigo-500/50 flex items-center justify-center mb-6 transition-all duration-300 group-hover:scale-110">
+                        <i class="fa-solid fa-cloud-arrow-up text-3xl text-indigo-400 group-hover:text-indigo-300"></i>
+                    </div>
+                    <h2 class="text-xl sm:text-2xl font-semibold text-white mb-2">ลากไฟล์เสียงมาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์</h2>
+                    <p class="text-zinc-400 text-sm sm:text-base mb-6 max-w-md">
+                        รองรับไฟล์เสียงยอดนิยมหลากหลายรูปแบบ เช่น <span class="text-zinc-200 font-medium">MP3, WAV, OGG, M4A, AAC</span>
+                    </p>
+                    <button type="button" class="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
+                        <i class="fa-solid fa-music"></i> เลือกไฟล์เสียงจากเครื่อง
+                    </button>
+                    <input type="file" id="audioFileInput" accept="audio/*" class="hidden">
+                </div>
+            </div>
+
+            <!-- Feature Highlights -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+                <div class="bg-studio-900/60 border border-studio-800 p-4 rounded-2xl flex items-start space-x-3">
+                    <div class="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-400"><i class="fa-solid fa-wave-square"></i></div>
+                    <div>
+                        <h3 class="text-sm font-semibold text-zinc-200">คลื่นเสียงแม่นยำ</h3>
+                        <p class="text-xs text-zinc-400 mt-1">ซูมเข้า-ออกและลากจุดเริ่มต้น-สิ้นสุดได้อย่างละเอียดระดับมิลลิวินาที</p>
+                    </div>
+                </div>
+                <div class="bg-studio-900/60 border border-studio-800 p-4 rounded-2xl flex items-start space-x-3">
+                    <div class="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-400"><i class="fa-solid fa-sliders"></i></div>
+                    <div>
+                        <h3 class="text-sm font-semibold text-zinc-200">เอฟเฟกต์ Fade In/Out</h3>
+                        <p class="text-xs text-zinc-400 mt-1">ปรับเสียงค่อยๆ ดังขึ้นและค่อยๆ เบาลงอย่างนุ่มนวล เหมาะสำหรับทำริงโทน</p>
+                    </div>
+                </div>
+                <div class="bg-studio-900/60 border border-studio-800 p-4 rounded-2xl flex items-start space-x-3">
+                    <div class="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400"><i class="fa-solid fa-file-export"></i></div>
+                    <div>
+                        <h3 class="text-sm font-semibold text-zinc-200">ส่งออก MP3 & WAV</h3>
+                        <p class="text-xs text-zinc-400 mt-1">ประมวลผลรวดเร็วในเครื่องของคุณ ดาวน์โหลดได้ทันทีโดยไม่เสียคุณภาพ</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading State -->
+        <section id="loadingSection" class="hidden w-full max-w-md mx-auto text-center py-16">
+            <div class="inline-block w-14 h-14 border-4 border-studio-700 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+            <h3 class="text-lg font-medium text-white" id="loadingText">กำลังถอดรหัสไฟล์เสียง...</h3>
+            <p class="text-sm text-zinc-400 mt-1">กรุณารอสักครู่ ระบบกำลังสร้างกราฟคลื่นเสียง</p>
+        </section>
+
+        <!-- 2. Audio Studio Workspace (Active View) -->
+        <section id="studioSection" class="hidden space-y-6">
+            
+            <!-- File Info & Zoom Toolbar -->
+            <div class="bg-studio-900 border border-studio-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+                        <i class="fa-solid fa-file-audio text-lg"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h2 id="fileNameDisplay" class="text-sm sm:text-base font-semibold text-white truncate">song.mp3</h2>
+                        <div class="flex items-center space-x-3 text-xs text-zinc-400 font-mono">
+                            <span id="fileMetaDisplay">44.1 kHz • Stereo</span>
+                            <span>•</span>
+                            <span>ความยาวเต็ม: <span id="totalDurationDisplay" class="text-zinc-200">00:00.0</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zoom Controls -->
+                <div class="flex items-center space-x-2 bg-studio-950 p-1.5 rounded-xl border border-studio-800">
+                    <button id="zoomOutBtn" title="ซูมออก" class="w-8 h-8 rounded-lg hover:bg-studio-800 text-zinc-300 flex items-center justify-center transition disabled:opacity-40">
+                        <i class="fa-solid fa-magnifying-glass-minus"></i>
+                    </button>
+                    <span id="zoomLevelText" class="text-xs font-mono text-zinc-300 px-2 min-w-[3.5rem] text-center">100%</span>
+                    <button id="zoomInBtn" title="ซูมเข้า" class="w-8 h-8 rounded-lg hover:bg-studio-800 text-zinc-300 flex items-center justify-center transition disabled:opacity-40">
+                        <i class="fa-solid fa-magnifying-glass-plus"></i>
+                    </button>
+                    <button id="zoomResetBtn" title="พอดีหน้าจอ" class="px-2.5 h-8 rounded-lg hover:bg-studio-800 text-xs text-zinc-400 hover:text-white transition">
+                        รีเซ็ต
+                    </button>
+                </div>
+            </div>
+
+            <!-- Interactive Waveform Canvas Container -->
+            <div class="bg-studio-900 border border-studio-800 rounded-2xl p-3 sm:p-4 shadow-xl relative">
+                <div class="flex justify-between items-center text-xs text-zinc-400 mb-2 px-1">
+                    <span><i class="fa-solid fa-hand-pointer mr-1 text-indigo-400"></i> ลากแถบสีฟ้า/ม่วงเพื่อกำหนดจุดตัด หรือคลิกบนคลื่นเสียงเพื่อเลื่อนจุดเล่น</span>
+                    <span class="font-mono text-cyan-400" id="cursorTimeDisplay">ตำแหน่งเล่น: 00:00.0</span>
+                </div>
+                
+                <!-- Scrollable Wrapper for Zoom -->
+                <div id="waveformScrollContainer" class="w-full overflow-x-auto rounded-xl bg-studio-950 border border-studio-800 relative select-none">
+                    <div id="waveformInner" class="relative h-48 sm:h-60 w-full">
+                        <canvas id="waveformCanvas" class="block w-full h-full"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Playback & Transport Bar -->
+            <div class="bg-studio-900 border border-studio-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-2 sm:space-x-3">
+                    <button id="playPauseBtn" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-600/25 transition flex items-center gap-2">
+                        <i id="playPauseIcon" class="fa-solid fa-play"></i>
+                        <span id="playPauseText">เล่นช่วงที่เลือก</span>
+                    </button>
+                    <button id="stopBtn" class="p-2.5 w-11 h-11 rounded-xl bg-studio-800 hover:bg-studio-700 text-zinc-200 border border-studio-700 transition flex items-center justify-center" title="หยุดเล่น">
+                        <i class="fa-solid fa-stop"></i>
+                    </button>
+                </div>
+
+                <!-- Playback Options -->
+                <div class="flex flex-wrap items-center gap-4 sm:gap-6">
+                    <label class="inline-flex items-center cursor-pointer space-x-2.5">
+                        <input type="checkbox" id="loopToggle" class="sr-only peer">
+                        <div class="w-10 h-5 bg-studio-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600 relative border border-studio-700"></div>
+                        <span class="text-sm text-zinc-300 select-none"><i class="fa-solid fa-repeat mr-1 text-indigo-400"></i> เล่นวนซ้ำ (Loop)</span>
+                    </label>
+
+                    <label class="inline-flex items-center cursor-pointer space-x-2.5">
+                        <input type="checkbox" id="playSelectionOnly" checked class="sr-only peer">
+                        <div class="w-10 h-5 bg-studio-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600 relative border border-studio-700"></div>
+                        <span class="text-sm text-zinc-300 select-none">เล่นเฉพาะส่วนที่ตัด</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Controls Grid: Precision Trim, Effects, and Export -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Card 1: Precision Time Selection -->
+                <div class="bg-studio-900 border border-studio-800 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+                    <div>
+                        <h3 class="text-base font-semibold text-white flex items-center gap-2 mb-4">
+                            <i class="fa-solid fa-clock text-cyan-400"></i> กำหนดเวลาตัดต่ออย่างละเอียด
+                        </h3>
+                        
+                        <!-- Start Time -->
+                        <div class="mb-4">
+                            <label class="block text-xs text-zinc-400 mb-1.5">จุดเริ่มต้น (Start Time)</label>
+                            <div class="flex items-center space-x-1.5">
+                                <button onclick="adjustTime('start', -1)" class="px-2 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-xs font-mono text-zinc-300 border border-studio-700">-1s</button>
+                                <button onclick="adjustTime('start', -0.1)" class="px-2 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-xs font-mono text-zinc-300 border border-studio-700">-0.1s</button>
+                                <input type="text" id="startTimeInput" value="00:00.0" class="w-full bg-studio-950 border border-studio-700 focus:border-cyan-500 rounded-lg px-3 py-1.5 text-center font-mono text-sm text-cyan-400 focus:outline-none">
+                                <button onclick="adjustTime('start', 0.1)" class="px-2 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-xs font-mono text-zinc-300 border border-studio-700">+0.1s</button>
+                                <button onclick="adjustTime('start', 1)" class="px-2 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-xs font-mono text-zinc-300 border border-studio-700">+1s</button>
+                            </div>
+                        </div>
+
+                        <!-- End Time -->
+                        <div>
+                            <label class="block text-xs text-zinc-400 mb-1.5">จุดสิ้นสุด (End Time)</label>
+                            <div class="flex items-center space-x-1.5">
+                                <button onclick="adjustTime('end', -1)" class="px-2 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-xs font-mono text-zinc-300 border border-studio-700">-1s</button>
+                                <button onclick="adjustTime('end', -0.1)" class="px-2 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-xs font-mono text-zinc-300 border border-studio-700">-0.1s</button>
+                                <input type="text" id="endTimeInput" value="00:00.0" class="w-full bg-studio-950 border border-studio-700 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-center font-mono text-sm text-indigo-400 focus:outline-none">
+                                <button onclick="adjustTime('end', 0.1)" class="px-2 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-xs font-mono text-zinc-300 border border-studio-700">+0.1s</button>
+                                <button onclick="adjustTime('end', 1)" class="px-2 py-2 rounded-lg bg-studio-800 hover:bg-studio-700 text-xs font-mono text-zinc-300 border border-studio-700">+1s</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selected Duration Summary -->
+                    <div class="bg-studio-950 border border-studio-800 rounded-xl p-3 flex items-center justify-between">
+                        <span class="text-xs text-zinc-400">ความยาวส่วนที่เลือก:</span>
+                        <span id="selectedDurationDisplay" class="font-mono text-base font-semibold text-emerald-400">00:00.0</span>
+                    </div>
+                </div>
+
+                <!-- Card 2: Audio Fade Effects -->
+                <div class="bg-studio-900 border border-studio-800 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+                    <div>
+                        <h3 class="text-base font-semibold text-white flex items-center gap-2 mb-4">
+                            <i class="fa-solid fa-wave-square text-indigo-400"></i> เอฟเฟกต์ความดังเสียง (Fade)
+                        </h3>
+
+                        <!-- Fade In -->
+                        <div class="mb-5">
+                            <div class="flex justify-between items-center mb-2">
+                                <label for="fadeInSlider" class="text-sm text-zinc-300 flex items-center gap-2">
+                                    <i class="fa-solid fa-arrow-trend-up text-emerald-400 text-xs"></i> ค่อยๆ ดังขึ้น (Fade In)
+                                </label>
+                                <span id="fadeInValue" class="font-mono text-xs px-2 py-0.5 rounded bg-studio-800 text-emerald-400 border border-studio-700">0.0 วินาที</span>
+                            </div>
+                            <input type="range" id="fadeInSlider" min="0" max="5" step="0.1" value="0" class="w-full">
+                        </div>
+
+                        <!-- Fade Out -->
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <label for="fadeOutSlider" class="text-sm text-zinc-300 flex items-center gap-2">
+                                    <i class="fa-solid fa-arrow-trend-down text-amber-400 text-xs"></i> ค่อยๆ เบาลง (Fade Out)
+                                </label>
+                                <span id="fadeOutValue" class="font-mono text-xs px-2 py-0.5 rounded bg-studio-800 text-amber-400 border border-studio-700">0.0 วินาที</span>
+                            </div>
+                            <input type="range" id="fadeOutSlider" min="0" max="5" step="0.1" value="0" class="w-full">
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-zinc-400 bg-studio-950/70 p-3 rounded-xl border border-studio-800/80">
+                        <i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i> เอฟเฟกต์ Fade จะทำงานทั้งตอนกดฟังตัวอย่างและตอนบันทึกไฟล์จริง
+                    </p>
+                </div>
+
+                <!-- Card 3: Export & Download -->
+                <div class="bg-studio-900 border border-studio-800 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+                    <div>
+                        <h3 class="text-base font-semibold text-white flex items-center gap-2 mb-4">
+                            <i class="fa-solid fa-download text-emerald-400"></i> บันทึกและส่งออกไฟล์
+                        </h3>
+
+                        <div class="mb-4">
+                            <label class="block text-xs text-zinc-400 mb-1.5">รูปแบบไฟล์ (Format)</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button" id="formatMp3Btn" class="py-2.5 px-3 rounded-xl border border-indigo-500 bg-indigo-500/15 text-white text-sm font-medium flex flex-col items-center justify-center transition">
+                                    <span>MP3</span>
+                                    <span class="text-[10px] text-indigo-300 font-normal">ขนาดเล็ก พกพาสะดวก</span>
+                                </button>
+                                <button type="button" id="formatWavBtn" class="py-2.5 px-3 rounded-xl border border-studio-700 bg-studio-950 text-zinc-400 hover:text-white text-sm font-medium flex flex-col items-center justify-center transition">
+                                    <span>WAV</span>
+                                    <span class="text-[10px] text-zinc-500 font-normal">คุณภาพสูงสุด Lossless</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="mp3QualityBox" class="mb-2">
+                            <label for="bitrateSelect" class="block text-xs text-zinc-400 mb-1.5">คุณภาพเสียง MP3 (Bitrate)</label>
+                            <select id="bitrateSelect" class="w-full bg-studio-950 border border-studio-700 rounded-xl px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500">
+                                <option value="128">128 kbps (มาตรฐาน)</option>
+                                <option value="192" selected>192 kbps (คุณภาพสูง - แนะนำ)</option>
+                                <option value="320">320 kbps (สูงสุดระดับสตูดิโอ)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button id="exportBtn" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-scissors"></i>
+                        <span id="exportBtnText">ตัดและดาวน์โหลดไฟล์</span>
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-studio-800/80 py-4 text-center text-xs text-zinc-500">
+        แอปตัดต่อไฟล์เสียง MP3 • ประมวลผลด้วย Web Audio API บนอุปกรณ์ของคุณโดยตรง
+    </footer>
+
+    <script>
+        /**
+         * State & Audio Engine Variables
+         */
+        let audioCtx = null;
+        let originalBuffer = null;
+        let sourceNode = null;
+        let gainNode = null;
+
+        let fileName = 'audio_cut';
+        let startTime = 0;
+        let endTime = 0;
+        let fadeInDuration = 0;
+        let fadeOutDuration = 0;
+
+        let isPlaying = false;
+        let playStartTimestamp = 0;
+        let playOffset = 0;
+        let animationFrameId = null;
+
+        let zoomLevel = 1; // 1x to 10x
+        let exportFormat = 'mp3'; // 'mp3' or 'wav'
+
+        // Dragging state on waveform
+        let dragMode = null; // 'start', 'end', 'seek'
+        const HANDLE_HIT_WIDTH = 14; // pixels
+
+        // DOM Elements
+        const uploadSection = document.getElementById('uploadSection');
+        const loadingSection = document.getElementById('loadingSection');
+        const studioSection = document.getElementById('studioSection');
+        const dropZone = document.getElementById('dropZone');
+        const audioFileInput = document.getElementById('audioFileInput');
+        const resetBtn = document.getElementById('resetBtn');
+
+        const waveformScrollContainer = document.getElementById('waveformScrollContainer');
+        const waveformInner = document.getElementById('waveformInner');
+        const canvas = document.getElementById('waveformCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playPauseIcon = document.getElementById('playPauseIcon');
+        const playPauseText = document.getElementById('playPauseText');
+        const stopBtn = document.getElementById('stopBtn');
+        const loopToggle = document.getElementById('loopToggle');
+        const playSelectionOnly = document.getElementById('playSelectionOnly');
+
+        const startTimeInput = document.getElementById('startTimeInput');
+        const endTimeInput = document.getElementById('endTimeInput');
+        const selectedDurationDisplay = document.getElementById('selectedDurationDisplay');
+        const cursorTimeDisplay = document.getElementById('cursorTimeDisplay');
+
+        const fadeInSlider = document.getElementById('fadeInSlider');
+        const fadeOutSlider = document.getElementById('fadeOutSlider');
+        const fadeInValue = document.getElementById('fadeInValue');
+        const fadeOutValue = document.getElementById('fadeOutValue');
+
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomResetBtn = document.getElementById('zoomResetBtn');
+        const zoomLevelText = document.getElementById('zoomLevelText');
+
+        const formatMp3Btn = document.getElementById('formatMp3Btn');
+        const formatWavBtn = document.getElementById('formatWavBtn');
+        const mp3QualityBox = document.getElementById('mp3QualityBox');
+        const bitrateSelect = document.getElementById('bitrateSelect');
+        const exportBtn = document.getElementById('exportBtn');
+        const exportBtnText = document.getElementById('exportBtnText');
+
+        /**
+         * Utility: Show Toast Message
+         */
+        let toastTimeout;
+        function showToast(msg, type = 'info') {
+            const toastBox = document.getElementById('toastBox');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMsg.textContent = msg;
+            if (type === 'error') {
+                toastIcon.className = 'fa-solid fa-circle-exclamation text-rose-400 text-lg';
+            } else if (type === 'success') {
+                toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-lg';
+            } else {
+                toastIcon.className = 'fa-solid fa-circle-info text-indigo-400 text-lg';
+            }
+
+            toastBox.classList.remove('translate-y-20', 'opacity-0');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toastBox.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+
+        /**
+         * Utility: Time Formatting (MM:SS.d) & Parsing
+         */
+        function formatTime(seconds) {
+            if (isNaN(seconds) || seconds < 0) seconds = 0;
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const tenths = Math.floor((seconds % 1) * 10);
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${tenths}`;
+        }
+
+        function parseTime(str) {
+            const parts = str.trim().split(':');
+            if (parts.length === 2) {
+                const mins = parseFloat(parts[0]) || 0;
+                const secs = parseFloat(parts[1]) || 0;
+                return mins * 60 + secs;
+            }
+            const val = parseFloat(str);
+            return isNaN(val) ? 0 : val;
+        }
+
+        /**
+         * File Upload & Audio Decoding
+         */
+        dropZone.addEventListener('click', () => audioFileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-indigo-500', 'bg-studio-900');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-indigo-500', 'bg-studio-900');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-indigo-500', 'bg-studio-900');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        audioFileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            stopAudio();
+            studioSection.classList.add('hidden');
+            resetBtn.classList.add('hidden');
+            uploadSection.classList.remove('hidden');
+            audioFileInput.value = '';
+        });
+
+        async function handleFile(file) {
+            if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/i)) {
+                showToast('กรุณาเลือกไฟล์เสียงที่ถูกต้อง (MP3, WAV, OGG, M4A)', 'error');
+                return;
+            }
+
+            stopAudio();
+            uploadSection.classList.add('hidden');
+            studioSection.classList.add('hidden');
+            loadingSection.classList.remove('hidden');
+
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+
+                const arrayBuffer = await file.arrayBuffer();
+                originalBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+                // Extract clean filename without extension
+                fileName = file.name.replace(/\.[^/.]+$/, "");
+                document.getElementById('fileNameDisplay').textContent = file.name;
+                document.getElementById('fileMetaDisplay').textContent = 
+                    `${(originalBuffer.sampleRate / 1000).toFixed(1)} kHz • ${originalBuffer.numberOfChannels === 1 ? 'Mono' : 'Stereo'}`;
+                document.getElementById('totalDurationDisplay').textContent = formatTime(originalBuffer.duration);
+
+                // Initialize trim boundaries
+                startTime = 0;
+                endTime = originalBuffer.duration;
+                playOffset = 0;
+                zoomLevel = 1;
+                fadeInDuration = 0;
+                fadeOutDuration = 0;
+                fadeInSlider.value = 0;
+                fadeOutSlider.value = 0;
+                fadeInValue.textContent = '0.0 วินาที';
+                fadeOutValue.textContent = '0.0 วินาที';
+
+                updateTimeUI();
+                updateZoomUI();
+
+                loadingSection.classList.add('hidden');
+                studioSection.classList.remove('hidden');
+                resetBtn.classList.remove('hidden');
+
+                resizeCanvas();
+                showToast('โหลดไฟล์เสียงสำเร็จ พร้อมตัดต่อแล้ว!', 'success');
+            } catch (err) {
+                console.error(err);
+                loadingSection.classList.add('hidden');
+                uploadSection.classList.remove('hidden');
+                showToast('ไม่สามารถอ่านไฟล์เสียงนี้ได้ กรุณาลองไฟล์อื่น', 'error');
+            }
+        }
+
+        /**
+         * Canvas Sizing & Waveform Rendering
+         */
+        function resizeCanvas() {
+            if (!originalBuffer) return;
+            const containerWidth = waveformScrollContainer.clientWidth;
+            const targetWidth = Math.max(containerWidth, Math.floor(containerWidth * zoomLevel));
+            waveformInner.style.width = `${targetWidth}px`;
+
+            const dpr = window.devicePixelRatio || 1;
+            const rect = waveformInner.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+
+            drawWaveform();
+        }
+
+        window.addEventListener('resize', () => {
+            if (originalBuffer) resizeCanvas();
+        });
+
+        function drawWaveform() {
+            if (!originalBuffer) return;
+
+            const width = waveformInner.clientWidth;
+            const height = waveformInner.clientHeight;
+            const duration = originalBuffer.duration;
+
+            // Clear background
+            ctx.fillStyle = '#09090b';
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw subtle grid lines
+            ctx.strokeStyle = '#18181b';
+            ctx.lineWidth = 1;
+            const gridStep = width / 20;
+            for (let x = 0; x < width; x += gridStep) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+
+            // Center line
+            ctx.strokeStyle = '#27272a';
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+
+            // Calculate pixel positions for Start & End
+            const startX = (startTime / duration) * width;
+            const endX = (endTime / duration) * width;
+
+            // Draw Waveform Bars
+            const channelData = originalBuffer.getChannelData(0);
+            const totalSamples = channelData.length;
+            const samplesPerPixel = Math.max(1, Math.floor(totalSamples / width));
+            const midY = height / 2;
+
+            for (let x = 0; x < width; x++) {
+                const startSample = Math.floor((x / width) * totalSamples);
+                let min = 1.0;
+                let max = -1.0;
+
+                // Step sampling for high performance on long files
+                const step = Math.max(1, Math.floor(samplesPerPixel / 50));
+                for (let j = 0; j < samplesPerPixel; j += step) {
+                    const idx = startSample + j;
+                    if (idx < totalSamples) {
+                        const val = channelData[idx];
+                        if (val < min) min = val;
+                        if (val > max) max = val;
+                    }
+                }
+
+                if (min > max) { min = 0; max = 0; }
+
+                // Apply visual Fade envelope inside selected region
+                let gainMultiplier = 1.0;
+                const currentTimeAtX = (x / width) * duration;
+                if (currentTimeAtX >= startTime && currentTimeAtX <= endTime) {
+                    if (fadeInDuration > 0 && currentTimeAtX - startTime < fadeInDuration) {
+                        gainMultiplier = (currentTimeAtX - startTime) / fadeInDuration;
+                    }
+                    if (fadeOutDuration > 0 && endTime - currentTimeAtX < fadeOutDuration) {
+                        gainMultiplier = Math.min(gainMultiplier, (endTime - currentTimeAtX) / fadeOutDuration);
+                    }
+                }
+
+                const barTop = midY + min * midY * 0.9 * gainMultiplier;
+                const barBottom = midY + max * midY * 0.9 * gainMultiplier;
+                const barHeight = Math.max(2, barBottom - barTop);
+
+                // Color based on inside or outside selection
+                if (x >= startX && x <= endX) {
+                    const grad = ctx.createLinearGradient(0, barTop, 0, barBottom);
+                    grad.addColorStop(0, '#38bdf8');
+                    grad.addColorStop(0.5, '#818cf8');
+                    grad.addColorStop(1, '#38bdf8');
+                    ctx.fillStyle = grad;
+                } else {
+                    ctx.fillStyle = '#27272a';
+                }
+
+                ctx.fillRect(x, barTop, 1.5, barHeight);
+            }
+
+            // Shaded Dim Overlay for Unselected Regions
+            ctx.fillStyle = 'rgba(9, 9, 11, 0.65)';
+            ctx.fillRect(0, 0, startX, height);
+            ctx.fillRect(endX, 0, width - endX, height);
+
+            // Selected Region Tint
+            ctx.fillStyle = 'rgba(99, 102, 241, 0.08)';
+            ctx.fillRect(startX, 0, endX - startX, height);
+
+            // Draw Fade Curves Overlay
+            if (fadeInDuration > 0) {
+                const fadeInEndX = Math.min(endX, ((startTime + fadeInDuration) / duration) * width);
+                ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(startX, height);
+                ctx.lineTo(fadeInEndX, 15);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            if (fadeOutDuration > 0) {
+                const fadeOutStartX = Math.max(startX, ((endTime - fadeOutDuration) / duration) * width);
+                ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(fadeOutStartX, 15);
+                ctx.lineTo(endX, height);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Draw Start Handle Line & Grip
+            drawHandle(startX, height, '#06b6d4', 'เริ่ม');
+
+            // Draw End Handle Line & Grip
+            drawHandle(endX, height, '#6366f1', 'จบ');
+
+            // Draw Playback Cursor
+            const currentPos = isPlaying 
+                ? playOffset + (audioCtx.currentTime - playStartTimestamp) 
+                : playOffset;
+            const cursorX = (Math.min(duration, Math.max(0, currentPos)) / duration) * width;
+
+            ctx.strokeStyle = '#f43f5e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cursorX, 0);
+            ctx.lineTo(cursorX, height);
+            ctx.stroke();
+
+            // Cursor top triangle
+            ctx.fillStyle = '#f43f5e';
+            ctx.beginPath();
+            ctx.moveTo(cursorX - 6, 0);
+            ctx.lineTo(cursorX + 6, 0);
+            ctx.lineTo(cursorX, 9);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawHandle(x, height, color, label) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+
+            // Handle Pill Badge
+            const badgeW = 34;
+            const badgeH = 20;
+            const badgeX = Math.min(Math.max(x - badgeW / 2, 2), waveformInner.clientWidth - badgeW - 2);
+            const badgeY = height - badgeH - 6;
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '600 10px Prompt, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, badgeX + badgeW / 2, badgeY + badgeH / 2 + 1);
+        }
+
+        /**
+         * Interactive Canvas Mouse & Touch Dragging
+         */
+        function getPointerX(e) {
+            const rect = waveformInner.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            return Math.max(0, Math.min(rect.width, clientX - rect.left));
+        }
+
+        function handlePointerDown(e) {
+            if (!originalBuffer) return;
+            const x = getPointerX(e);
+            const width = waveformInner.clientWidth;
+            const duration = originalBuffer.duration;
+
+            const startX = (startTime / duration) * width;
+            const endX = (endTime / duration) * width;
+
+            if (Math.abs(x - startX) <= HANDLE_HIT_WIDTH) {
+                dragMode = 'start';
+            } else if (Math.abs(x - endX) <= HANDLE_HIT_WIDTH) {
+                dragMode = 'end';
+            } else {
+                dragMode = 'seek';
+                const clickedTime = (x / width) * duration;
+                seekTo(clickedTime);
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!originalBuffer) return;
+            const x = getPointerX(e);
+            const width = waveformInner.clientWidth;
+            const duration = originalBuffer.duration;
+
+            // Update cursor icon on hover
+            if (!dragMode) {
+                const startX = (startTime / duration) * width;
+                const endX = (endTime / duration) * width;
+                if (Math.abs(x - startX) <= HANDLE_HIT_WIDTH || Math.abs(x - endX) <= HANDLE_HIT_WIDTH) {
+                    canvas.style.cursor = 'ew-resize';
+                } else {
+                    canvas.style.cursor = 'pointer';
+                }
+                return;
+            }
+
+            if (e.cancelable) e.preventDefault();
+            const newTime = (x / width) * duration;
+
+            if (dragMode === 'start') {
+                startTime = Math.max(0, Math.min(newTime, endTime - 0.1));
+                if (playOffset < startTime) playOffset = startTime;
+                updateTimeUI();
+                drawWaveform();
+            } else if (dragMode === 'end') {
+                endTime = Math.min(duration, Math.max(newTime, startTime + 0.1));
+                if (playOffset > endTime) playOffset = startTime;
+                updateTimeUI();
+                drawWaveform();
+            } else if (dragMode === 'seek') {
+                seekTo(newTime);
+            }
+        }
+
+        function handlePointerUp() {
+            dragMode = null;
+        }
+
+        canvas.addEventListener('mousedown', handlePointerDown);
+        window.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+
+        canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+        window.addEventListener('touchmove', handlePointerMove, { passive: false });
+        window.addEventListener('touchend', handlePointerUp);
+
+        /**
+         * Time Inputs & Step Adjustments
+         */
+        function updateTimeUI() {
+            startTimeInput.value = formatTime(startTime);
+            endTimeInput.value = formatTime(endTime);
+            selectedDurationDisplay.textContent = formatTime(endTime - startTime);
+            cursorTimeDisplay.textContent = `ตำแหน่งเล่น: ${formatTime(playOffset)}`;
+        }
+
+        window.adjustTime = function(target, delta) {
+            if (!originalBuffer) return;
+            const duration = originalBuffer.duration;
+            if (target === 'start') {
+                startTime = Math.max(0, Math.min(startTime + delta, endTime - 0.1));
+                if (playOffset < startTime) playOffset = startTime;
+            } else {
+                endTime = Math.min(duration, Math.max(endTime + delta, startTime + 0.1));
+            }
+            updateTimeUI();
+            drawWaveform();
+        };
+
+        startTimeInput.addEventListener('change', () => {
+            if (!originalBuffer) return;
+            const parsed = parseTime(startTimeInput.value);
+            startTime = Math.max(0, Math.min(parsed, endTime - 0.1));
+            updateTimeUI();
+            drawWaveform();
+        });
+
+        endTimeInput.addEventListener('change', () => {
+            if (!originalBuffer) return;
+            const parsed = parseTime(endTimeInput.value);
+            endTime = Math.min(originalBuffer.duration, Math.max(parsed, startTime + 0.1));
+            updateTimeUI();
+            drawWaveform();
+        });
+
+        /**
+         * Fade Sliders
+         */
+        fadeInSlider.addEventListener('input', (e) => {
+            fadeInDuration = parseFloat(e.target.value);
+            fadeInValue.textContent = `${fadeInDuration.toFixed(1)} วินาที`;
+            drawWaveform();
+        });
+
+        fadeOutSlider.addEventListener('input', (e) => {
+            fadeOutDuration = parseFloat(e.target.value);
+            fadeOutValue.textContent = `${fadeOutDuration.toFixed(1)} วินาที`;
+            drawWaveform();
+        });
+
+        /**
+         * Zoom Controls
+         */
+        function updateZoomUI() {
+            zoomLevelText.textContent = `${Math.round(zoomLevel * 100)}%`;
+            zoomOutBtn.disabled = zoomLevel <= 1;
+            zoomInBtn.disabled = zoomLevel >= 10;
+        }
+
+        zoomInBtn.addEventListener('click', () => {
+            if (zoomLevel < 10) {
+                zoomLevel = Math.min(10, zoomLevel + 1);
+                updateZoomUI();
+                resizeCanvas();
+            }
+        });
+
+        zoomOutBtn.addEventListener('click', () => {
+            if (zoomLevel > 1) {
+                zoomLevel = Math.max(1, zoomLevel - 1);
+                updateZoomUI();
+                resizeCanvas();
+            }
+        });
+
+        zoomResetBtn.addEventListener('click', () => {
+            zoomLevel = 1;
+            updateZoomUI();
+            resizeCanvas();
+        });
+
+        /**
+         * Audio Playback Engine (with Realtime Fade Preview)
+         */
+        function startAudio(offset) {
+            if (!originalBuffer) return;
+            stopAudioSourceOnly();
+
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const playEnd = playSelectionOnly.checked ? endTime : originalBuffer.duration;
+            if (offset < startTime && playSelectionOnly.checked) offset = startTime;
+            if (offset >= playEnd) offset = startTime;
+
+            const playDuration = playEnd - offset;
+            if (playDuration <= 0.02) return;
+
+            sourceNode = audioCtx.createBufferSource();
+            sourceNode.buffer = originalBuffer;
+
+            gainNode = audioCtx.createGain();
+            const now = audioCtx.currentTime;
+
+            // Schedule Fade In / Fade Out envelopes accurately
+            const selDuration = endTime - startTime;
+            const effFadeIn = Math.min(fadeInDuration, selDuration / 2);
+            const effFadeOut = Math.min(fadeOutDuration, selDuration / 2);
+
+            gainNode.gain.setValueAtTime(1.0, now);
+
+            // Fade In envelope
+            if (effFadeIn > 0 && offset < startTime + effFadeIn) {
+                const elapsedInFade = Math.max(0, offset - startTime);
+                const startGain = elapsedInFade / effFadeIn;
+                const remainingFadeIn = effFadeIn - elapsedInFade;
+                gainNode.gain.setValueAtTime(Math.max(0.001, startGain), now);
+                gainNode.gain.linearRampToValueAtTime(1.0, now + remainingFadeIn);
+            }
+
+            // Fade Out envelope
+            if (effFadeOut > 0 && playEnd > endTime - effFadeOut) {
+                const fadeOutStartPos = endTime - effFadeOut;
+                if (offset < fadeOutStartPos) {
+                    const timeUntilFadeOut = fadeOutStartPos - offset;
+                    gainNode.gain.setValueAtTime(1.0, now + timeUntilFadeOut);
+                    gainNode.gain.linearRampToValueAtTime(0.001, now + timeUntilFadeOut + effFadeOut);
+                } else {
+                    const elapsedOut = offset - fadeOutStartPos;
+                    const currentGain = Math.max(0.001, 1 - (elapsedOut / effFadeOut));
+                    const remainingOut = Math.max(0.01, endTime - offset);
+                    gainNode.gain.setValueAtTime(currentGain, now);
+                    gainNode.gain.linearRampToValueAtTime(0.001, now + remainingOut);
+                }
+            }
+
+            sourceNode.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            playStartTimestamp = now;
+            playOffset = offset;
+            isPlaying = true;
+
+            sourceNode.start(0, offset, playDuration);
+
+            sourceNode.onended = () => {
+                if (!isPlaying) return;
+                if (loopToggle.checked) {
+                    startAudio(startTime);
+                } else {
+                    stopAudio();
+                }
+            };
+
+            updatePlayButtonUI();
+            animateCursor();
+        }
+
+        function stopAudioSourceOnly() {
+            if (sourceNode) {
+                sourceNode.onended = null;
+                try { sourceNode.stop(); } catch (e) {}
+                sourceNode.disconnect();
+                sourceNode = null;
+            }
+            if (gainNode) {
+                gainNode.disconnect();
+                gainNode = null;
+            }
+            cancelAnimationFrame(animationFrameId);
+        }
+
+        function pauseAudio() {
+            if (!isPlaying) return;
+            playOffset = playOffset + (audioCtx.currentTime - playStartTimestamp);
+            isPlaying = false;
+            stopAudioSourceOnly();
+            updatePlayButtonUI();
+            drawWaveform();
+        }
+
+        function stopAudio() {
+            isPlaying = false;
+            stopAudioSourceOnly();
+            playOffset = startTime;
+            updatePlayButtonUI();
+            cursorTimeDisplay.textContent = `ตำแหน่งเล่น: ${formatTime(playOffset)}`;
+            drawWaveform();
+        }
+
+        function seekTo(time) {
+            const clamped = Math.max(0, Math.min(originalBuffer.duration, time));
+            playOffset = clamped;
+            cursorTimeDisplay.textContent = `ตำแหน่งเล่น: ${formatTime(playOffset)}`;
+            if (isPlaying) {
+                startAudio(clamped);
+            } else {
+                drawWaveform();
+            }
+        }
+
+        function updatePlayButtonUI() {
+            if (isPlaying) {
+                playPauseIcon.className = 'fa-solid fa-pause';
+                playPauseText.textContent = 'หยุดชั่วคราว';
+                playPauseBtn.classList.replace('bg-indigo-600', 'bg-amber-600');
+                playPauseBtn.classList.replace('hover:bg-indigo-500', 'hover:bg-amber-500');
+            } else {
+                playPauseIcon.className = 'fa-solid fa-play';
+                playPauseText.textContent = playSelectionOnly.checked ? 'เล่นช่วงที่เลือก' : 'เล่นเสียง';
+                playPauseBtn.classList.replace('bg-amber-600', 'bg-indigo-600');
+                playPauseBtn.classList.replace('hover:bg-amber-500', 'hover:bg-indigo-500');
+            }
+        }
+
+        playPauseBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                pauseAudio();
+            } else {
+                startAudio(playOffset);
+            }
+        });
+
+        stopBtn.addEventListener('click', stopAudio);
+
+        playSelectionOnly.addEventListener('change', () => {
+            if (!isPlaying) updatePlayButtonUI();
+        });
+
+        function animateCursor() {
+            if (!isPlaying) return;
+            const currentPos = playOffset + (audioCtx.currentTime - playStartTimestamp);
+            cursorTimeDisplay.textContent = `ตำแหน่งเล่น: ${formatTime(currentPos)}`;
+            drawWaveform();
+            animationFrameId = requestAnimationFrame(animateCursor);
+        }
+
+        // Spacebar shortcut for Play/Pause
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && originalBuffer && document.activeElement.tagName !== 'INPUT') {
+                e.preventDefault();
+                playPauseBtn.click();
+            }
+        });
+
+        /**
+         * Export Format Toggle
+         */
+        formatMp3Btn.addEventListener('click', () => {
+            exportFormat = 'mp3';
+            formatMp3Btn.className = 'py-2.5 px-3 rounded-xl border border-indigo-500 bg-indigo-500/15 text-white text-sm font-medium flex flex-col items-center justify-center transition';
+            formatWavBtn.className = 'py-2.5 px-3 rounded-xl border border-studio-700 bg-studio-950 text-zinc-400 hover:text-white text-sm font-medium flex flex-col items-center justify-center transition';
+            mp3QualityBox.classList.remove('hidden');
+        });
+
+        formatWavBtn.addEventListener('click', () => {
+            exportFormat = 'wav';
+            formatWavBtn.className = 'py-2.5 px-3 rounded-xl border border-indigo-500 bg-indigo-500/15 text-white text-sm font-medium flex flex-col items-center justify-center transition';
+            formatMp3Btn.className = 'py-2.5 px-3 rounded-xl border border-studio-700 bg-studio-950 text-zinc-400 hover:text-white text-sm font-medium flex flex-col items-center justify-center transition';
+            mp3QualityBox.classList.add('hidden');
+        });
+
+        /**
+         * Audio Processing, Trimming & Encoding (MP3 / WAV)
+         */
+        exportBtn.addEventListener('click', async () => {
+            if (!originalBuffer) return;
+            stopAudio();
+
+            exportBtn.disabled = true;
+            exportBtnText.textContent = 'กำลังประมวลผลไฟล์เสียง...';
+
+            // Allow UI to repaint before heavy CPU encoding
+            await new Promise(r => setTimeout(r, 50));
+
+            try {
+                const sampleRate = originalBuffer.sampleRate;
+                const numChannels = originalBuffer.numberOfChannels;
+                const startSample = Math.floor(startTime * sampleRate);
+                const endSample = Math.floor(endTime * sampleRate);
+                const frameCount = Math.max(1, endSample - startSample);
+
+                // Create trimmed buffer with Fade In & Fade Out applied
+                const trimmedBuffer = audioCtx.createBuffer(numChannels, frameCount, sampleRate);
+                const selDuration = frameCount / sampleRate;
+                const effFadeIn = Math.min(fadeInDuration, selDuration / 2);
+                const effFadeOut = Math.min(fadeOutDuration, selDuration / 2);
+                const fadeInSamples = Math.floor(effFadeIn * sampleRate);
+                const fadeOutSamples = Math.floor(effFadeOut * sampleRate);
+
+                for (let ch = 0; ch < numChannels; ch++) {
+                    const srcData = originalBuffer.getChannelData(ch);
+                    const dstData = trimmedBuffer.getChannelData(ch);
+
+                    for (let i = 0; i < frameCount; i++) {
+                        let sample = srcData[startSample + i] || 0;
+
+                        // Apply Fade In
+                        if (fadeInSamples > 0 && i < fadeInSamples) {
+                            sample *= (i / fadeInSamples);
+                        }
+                        // Apply Fade Out
+                        if (fadeOutSamples > 0 && i > frameCount - fadeOutSamples) {
+                            sample *= ((frameCount - i) / fadeOutSamples);
+                        }
+
+                        dstData[i] = sample;
+                    }
+                }
+
+                let blob;
+                let ext;
+
+                if (exportFormat === 'mp3') {
+                    const bitrate = parseInt(bitrateSelect.value, 10) || 192;
+                    blob = encodeMP3(trimmedBuffer, bitrate);
+                    ext = 'mp3';
+                } else {
+                    blob = encodeWAV(trimmedBuffer);
+                    ext = 'wav';
+                }
+
+                // Trigger Download
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${fileName}_cut.${ext}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+                showToast(`ดาวน์โหลดไฟล์ ${fileName}_cut.${ext} สำเร็จ!`, 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('เกิดข้อผิดพลาดในการสร้างไฟล์เสียง', 'error');
+            } finally {
+                exportBtn.disabled = false;
+                exportBtnText.textContent = 'ตัดและดาวน์โหลดไฟล์';
+            }
+        });
+
+        /**
+         * Encode AudioBuffer to MP3 Blob using LameJS
+         */
+        function encodeMP3(buffer, bitrate) {
+            const channels = Math.min(2, buffer.numberOfChannels);
+            const sampleRate = buffer.sampleRate;
+            const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, bitrate);
+            const mp3Data = [];
+
+            const left = floatTo16BitPCM(buffer.getChannelData(0));
+            const right = channels > 1 ? floatTo16BitPCM(buffer.getChannelData(1)) : left;
+
+            const sampleBlockSize = 1152;
+            for (let i = 0; i < left.length; i += sampleBlockSize) {
+                const leftChunk = left.subarray(i, i + sampleBlockSize);
+                const rightChunk = right.subarray(i, i + sampleBlockSize);
+                const mp3buf = channels === 1 
+                    ? mp3encoder.encodeBuffer(leftChunk) 
+                    : mp3encoder.encodeBuffer(leftChunk, rightChunk);
+                if (mp3buf.length > 0) {
+                    mp3Data.push(mp3buf);
+                }
+            }
+
+            const endBuf = mp3encoder.flush();
+            if (endBuf.length > 0) {
+                mp3Data.push(endBuf);
+            }
+
+            return new Blob(mp3Data, { type: 'audio/mp3' });
+        }
+
+        function floatTo16BitPCM(input) {
+            const output = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+                const s = Math.max(-1, Math.min(1, input[i]));
+                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return output;
+        }
+
+        /**
+         * Encode AudioBuffer to WAV Blob
+         */
+        function encodeWAV(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+
+            const result = interleave(buffer);
+            const dataLength = result.length * (bitDepth / 8);
+            const arrayBuffer = new ArrayBuffer(44 + dataLength);
+            const view = new DataView(arrayBuffer);
+
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataLength, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, format, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
+            view.setUint16(32, numChannels * (bitDepth / 8), true);
+            view.setUint16(34, bitDepth, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataLength, true);
+
+            let offset = 44;
+            for (let i = 0; i < result.length; i++, offset += 2) {
+                const s = Math.max(-1, Math.min(1, result[i]));
+                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        function interleave(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            if (numChannels === 1) return buffer.getChannelData(0);
+
+            const left = buffer.getChannelData(0);
+            const right = buffer.getChannelData(1);
+            const length = left.length + right.length;
+            const result = new Float32Array(length);
+
+            let inputIndex = 0;
+            for (let i = 0; i < length; ) {
+                result[i++] = left[inputIndex];
+                result[i++] = right[inputIndex];
+                inputIndex++;
+            }
+            return result;
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+    </script>
+</body>
+</html>
