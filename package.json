@@ -15,6 +15,7 @@
   "build": {
     "appId": "com.example.texasintechtoolbox",
     "productName": "Texas Intech Toolbox",
+    "publish": "never",
     "directories": {
       "output": "dist"
     },
